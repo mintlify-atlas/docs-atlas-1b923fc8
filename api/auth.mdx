@@ -1,0 +1,189 @@
+---
+title: 'Authentication — login and waiter lookup endpoints'
+description: 'POST /api/login authenticates restaurant staff by username and password, returning the user record with role for client-side access control.'
+---
+
+Wayra Web Backend uses credential-based login. The client submits a `user` and `pass` in the request body; the server queries the `usuarios` table and returns the matched user record, including their role. The `rol` field — either `admin` or `mozo` — is used by the frontend to determine which features are accessible. No tokens or sessions are issued; each subsequent request is stateless.
+
+<Note>
+  Only accounts with `estado = 1` (active) can log in. Inactive accounts receive a `401` response identical to a wrong-password response.
+</Note>
+
+---
+
+## POST /api/login
+
+Authenticate a staff member by username and password.
+
+### Request body
+
+<ParamField body="user" type="string" required>
+  The account username stored in the `usuarios` table.
+</ParamField>
+
+<ParamField body="pass" type="string" required>
+  The account password stored in the `usuarios` table.
+</ParamField>
+
+### Responses
+
+<ResponseField name="success" type="boolean" required>
+  `true` on a successful login, `false` on an authentication failure.
+</ResponseField>
+
+<ResponseField name="usuario" type="object">
+  Present only when `success` is `true`. Contains the authenticated user record.
+
+  <Expandable title="properties">
+    <ResponseField name="id_usuario" type="number" required>
+      Unique identifier for the user.
+    </ResponseField>
+    <ResponseField name="nombre" type="string" required>
+      Display name of the staff member.
+    </ResponseField>
+    <ResponseField name="rol" type="string" required>
+      Role assigned to the user. One of `admin` or `mozo`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Status codes**
+
+| Status | Condition |
+|--------|-----------|
+| `200`  | Credentials matched an active account. |
+| `401`  | No active account found for the given `user`/`pass` combination. |
+| `500`  | Unexpected server or database error. |
+
+**200 — success**
+
+```json
+{
+  "success": true,
+  "usuario": {
+    "id_usuario": 3,
+    "nombre": "María López",
+    "rol": "mozo"
+  }
+}
+```
+
+**401 — unauthorized**
+
+```json
+{
+  "success": false
+}
+```
+
+**500 — server error**
+
+```json
+{
+  "error": "Error en Login",
+  "detail": "<database error message>"
+}
+```
+
+**curl example**
+
+```bash
+curl --request POST \
+  --url http://localhost:3000/api/login \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "user": "mlopez",
+    "pass": "secret123"
+  }'
+```
+
+---
+
+## GET /api/usuarios/mozos
+
+Returns the list of all active waiters (`rol = 'mozo'`, `estado = 1`). Use this to populate a waiter-assignment dropdown when creating or editing a reservation.
+
+### Response
+
+An array of waiter objects.
+
+<ResponseField name="id_usuario" type="number" required>
+  Unique identifier for the waiter.
+</ResponseField>
+
+<ResponseField name="nombre" type="string" required>
+  Display name of the waiter.
+</ResponseField>
+
+**200 — success**
+
+```json
+[
+  { "id_usuario": 2, "nombre": "Carlos Ríos" },
+  { "id_usuario": 3, "nombre": "María López" }
+]
+```
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url http://localhost:3000/api/usuarios/mozos
+```
+
+---
+
+## GET /api/asignar-mozo
+
+Returns a single available waiter. The server selects the first active waiter (`rol = 'mozo'`, `estado = 1`). Use this for quick auto-assignment when opening a new reservation.
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` if a waiter was found, `false` if no active waiters exist.
+</ResponseField>
+
+<ResponseField name="mozo" type="object">
+  Present only when `success` is `true`.
+
+  <Expandable title="properties">
+    <ResponseField name="id_usuario" type="number" required>
+      Unique identifier for the waiter.
+    </ResponseField>
+    <ResponseField name="nombre" type="string" required>
+      Display name of the waiter.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Present only when `success` is `false`. Value: `"No hay mozos disponibles"`.
+</ResponseField>
+
+**200 — waiter found**
+
+```json
+{
+  "success": true,
+  "mozo": {
+    "id_usuario": 2,
+    "nombre": "Carlos Ríos"
+  }
+}
+```
+
+**200 — no waiters available**
+
+```json
+{
+  "success": false,
+  "message": "No hay mozos disponibles"
+}
+```
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url http://localhost:3000/api/asignar-mozo
+```

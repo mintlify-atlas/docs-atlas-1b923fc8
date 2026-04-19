@@ -1,0 +1,236 @@
+---
+title: 'Admin users API — create and manage staff accounts'
+description: 'CRUD endpoints for managing restaurant staff: list, create, update, delete users, and toggle active status for admin and mozo accounts.'
+---
+
+The admin users endpoints let managers create and maintain staff accounts. Each user has a name, login credentials, a role (`admin` or `mozo`), and an active status flag. You can list all users, create new staff accounts, update their name or role, toggle their active/inactive status, or permanently delete them.
+
+---
+
+## GET /api/admin/usuarios
+
+Returns all user accounts in the system, regardless of role or active status.
+
+### Response
+
+An array of user records.
+
+<ResponseField name="id_usuario" type="number" required>
+  Unique identifier for the user.
+</ResponseField>
+
+<ResponseField name="nombre" type="string" required>
+  User's display name.
+</ResponseField>
+
+<ResponseField name="usuario" type="string" required>
+  Login username.
+</ResponseField>
+
+<ResponseField name="rol" type="string" required>
+  User role. Either `"admin"` or `"mozo"`.
+</ResponseField>
+
+<ResponseField name="estado" type="number" required>
+  Active status. `1` means active, `0` means inactive.
+</ResponseField>
+
+**200 — success**
+
+```json
+[
+  {
+    "id_usuario": 1,
+    "nombre": "Carlos Ríos",
+    "usuario": "carlos.rios",
+    "rol": "mozo",
+    "estado": 1
+  }
+]
+```
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url http://localhost:3000/api/admin/usuarios
+```
+
+---
+
+## POST /api/admin/usuarios
+
+Creates a new staff account. New users are always created with `estado = 1` (active).
+
+### Request body
+
+<ParamField body="nombre" type="string" required>
+  User's display name.
+</ParamField>
+
+<ParamField body="usuario" type="string" required>
+  Login username. Must be unique.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Login password. Stored as provided — apply any hashing before calling this endpoint.
+</ParamField>
+
+<ParamField body="rol" type="string" required>
+  Role to assign. Accepted values: `"admin"` or `"mozo"`.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the user was created successfully.
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**curl example**
+
+```bash
+curl --request POST \
+  --url http://localhost:3000/api/admin/usuarios \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "nombre": "Ana Torres",
+    "usuario": "ana.torres",
+    "password": "secure-password",
+    "rol": "mozo"
+  }'
+```
+
+---
+
+## PUT /api/admin/usuarios/:id
+
+Updates a user's name, username, or role. This endpoint does **not** update the password.
+
+<Warning>
+  This endpoint does not accept or update the `password` field. To change a user's password, implement a dedicated password-update route.
+</Warning>
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_usuario` of the user to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="nombre" type="string" required>
+  Updated display name.
+</ParamField>
+
+<ParamField body="usuario" type="string" required>
+  Updated login username.
+</ParamField>
+
+<ParamField body="rol" type="string" required>
+  Updated role. Accepted values: `"admin"` or `"mozo"`.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the user record was updated.
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**curl example**
+
+```bash
+curl --request PUT \
+  --url http://localhost:3000/api/admin/usuarios/1 \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "nombre": "Ana Torres",
+    "usuario": "ana.torres",
+    "rol": "admin"
+  }'
+```
+
+---
+
+## DELETE /api/admin/usuarios/:id
+
+Permanently deletes a user account from the database.
+
+<Warning>
+  This operation is permanent and cannot be undone. The user record is hard-deleted from the database. Consider toggling `estado` to `0` instead if you want to deactivate the account without losing its history.
+</Warning>
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_usuario` of the user to delete.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the user was deleted. Also returns `true` if no user with that ID exists (no-op).
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**curl example**
+
+```bash
+curl --request DELETE \
+  --url http://localhost:3000/api/admin/usuarios/1
+```
+
+---
+
+## PUT /api/admin/usuarios/:id/estado
+
+Toggles a user's active status without modifying any other account data. Use this to temporarily deactivate a staff account or reactivate one.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_usuario` of the user to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="estado" type="number" required>
+  New active status. `1` activates the account, `0` deactivates it.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the status was updated.
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**curl example**
+
+```bash
+curl --request PUT \
+  --url http://localhost:3000/api/admin/usuarios/1/estado \
+  --header 'Content-Type: application/json' \
+  --data '{ "estado": 0 }'
+```

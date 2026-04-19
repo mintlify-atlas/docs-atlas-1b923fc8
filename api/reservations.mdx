@@ -1,0 +1,393 @@
+---
+title: 'Reservations API — book, confirm, and cancel tables'
+description: 'Endpoints for creating, reading, updating, confirming, and cancelling table reservations, with time-slot conflict detection and monthly counts.'
+---
+
+The Reservations API lets you manage the full lifecycle of a table booking at Wayra Nikkei. You can create new reservations, retrieve them filtered by date, update booking details, perform guest check-in, cancel bookings, and query occupied time slots to prevent double-booking.
+
+---
+
+## Listing reservations
+
+### GET /api/reservas
+
+Returns all non-cancelled reservations for a given date, joined with the assigned waiter's name and sorted by time ascending.
+
+#### Query parameters
+
+<ParamField query="fecha" type="string" default="today">
+  Date to filter reservations by, in `YYYY-MM-DD` format. Defaults to the current server date when omitted.
+</ParamField>
+
+#### Response
+
+An array of reservation rows. Each row contains all columns from the `reservas` table plus `nombre_mozo` from the joined `usuarios` table. Cancelled reservations (`estado_reserva = 'cancelada'`) are excluded.
+
+<ResponseField name="id_reserva" type="number" required>
+  Unique identifier for the reservation.
+</ResponseField>
+
+<ResponseField name="id_mesa" type="number" required>
+  Table number assigned to this reservation.
+</ResponseField>
+
+<ResponseField name="id_mozo" type="number">
+  Identifier of the assigned waiter. May be `null` if no waiter is assigned.
+</ResponseField>
+
+<ResponseField name="nombre_mozo" type="string">
+  Display name of the assigned waiter, joined from the `usuarios` table. `null` when no waiter is assigned.
+</ResponseField>
+
+<ResponseField name="dni_cliente" type="string" required>
+  Guest national ID number.
+</ResponseField>
+
+<ResponseField name="nombre_cliente" type="string" required>
+  Guest full name.
+</ResponseField>
+
+<ResponseField name="telefono_cliente" type="string">
+  Guest contact phone number.
+</ResponseField>
+
+<ResponseField name="fecha_reserva" type="string" required>
+  Reservation date in `YYYY-MM-DD` format.
+</ResponseField>
+
+<ResponseField name="hora_reserva" type="string" required>
+  Reservation time in `HH:mm:ss` format. Results are sorted by this field ascending.
+</ResponseField>
+
+<ResponseField name="estado_reserva" type="string" required>
+  Current status. One of `pendiente`, `confirmada`, or `completada`.
+</ResponseField>
+
+<ResponseField name="observacion" type="string">
+  Free-text notes for the reservation.
+</ResponseField>
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url 'http://localhost:3000/api/reservas?fecha=2025-04-20'
+```
+
+---
+
+### GET /api/reservas/hoy
+
+Returns today's reservations for a specific waiter, excluding completed bookings, sorted by time ascending.
+
+#### Query parameters
+
+<ParamField query="id_mozo" type="number" required>
+  Identifier of the waiter whose reservations to retrieve.
+</ParamField>
+
+#### Response
+
+An array of reservation rows from the `reservas` table where `DATE(fecha_reserva) = CURDATE()`, `id_mozo` matches, and `estado_reserva != 'completada'`. Fields are the same as `GET /api/reservas` minus the `nombre_mozo` join.
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url 'http://localhost:3000/api/reservas/hoy?id_mozo=2'
+```
+
+---
+
+## Creating a reservation
+
+### POST /api/reservas
+
+Creates a new reservation. `estado_reserva` is set to `'pendiente'` automatically.
+
+#### Request body
+
+<ParamField body="id_mesa" type="number" required>
+  Table to reserve.
+</ParamField>
+
+<ParamField body="id_mozo" type="number">
+  Waiter to assign. Pass `null` or omit to leave unassigned.
+</ParamField>
+
+<ParamField body="dni_cliente" type="string" required>
+  Guest national ID number.
+</ParamField>
+
+<ParamField body="nombre_cliente" type="string" required>
+  Guest full name.
+</ParamField>
+
+<ParamField body="telefono_cliente" type="string">
+  Guest contact phone number. Defaults to an empty string if omitted.
+</ParamField>
+
+<ParamField body="fecha_reserva" type="string" required>
+  Reservation date in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField body="hora_reserva" type="string" required>
+  Reservation time in `HH:mm` format.
+</ParamField>
+
+<ParamField body="observacion" type="string">
+  Free-text notes or special requests. Defaults to an empty string if omitted.
+</ParamField>
+
+#### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the reservation was inserted successfully.
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**curl example**
+
+```bash
+curl --request POST \
+  --url http://localhost:3000/api/reservas \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "id_mesa": 5,
+    "id_mozo": 2,
+    "dni_cliente": "12345678",
+    "nombre_cliente": "Ana Torres",
+    "telefono_cliente": "987654321",
+    "fecha_reserva": "2025-04-20",
+    "hora_reserva": "19:30",
+    "observacion": "Ventana preferida"
+  }'
+```
+
+---
+
+## Updating a reservation
+
+### PUT /api/reservas/:id
+
+Updates all fields of an existing reservation. All body fields are written directly; pass the current value for any field you do not want to change.
+
+#### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_reserva` of the reservation to update.
+</ParamField>
+
+#### Request body
+
+<ParamField body="id_mesa" type="number" required>
+  Table assigned to this reservation.
+</ParamField>
+
+<ParamField body="dni_cliente" type="string" required>
+  Guest national ID number.
+</ParamField>
+
+<ParamField body="nombre_cliente" type="string" required>
+  Guest full name.
+</ParamField>
+
+<ParamField body="telefono_cliente" type="string" required>
+  Guest contact phone number.
+</ParamField>
+
+<ParamField body="fecha_reserva" type="string" required>
+  Reservation date in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField body="hora_reserva" type="string" required>
+  Reservation time in `HH:mm` format.
+</ParamField>
+
+<ParamField body="observacion" type="string" required>
+  Free-text notes or special requests.
+</ParamField>
+
+<ParamField body="id_mozo" type="number">
+  Waiter to assign. Pass `null` to clear the assignment.
+</ParamField>
+
+#### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the update was applied.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Confirmation string. Value: `"Reserva actualizada"`.
+</ResponseField>
+
+**200 — success**
+
+```json
+{
+  "success": true,
+  "message": "Reserva actualizada"
+}
+```
+
+**curl example**
+
+```bash
+curl --request PUT \
+  --url http://localhost:3000/api/reservas/14 \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "id_mesa": 5,
+    "dni_cliente": "12345678",
+    "nombre_cliente": "Ana Torres",
+    "telefono_cliente": "987654321",
+    "fecha_reserva": "2025-04-20",
+    "hora_reserva": "20:00",
+    "observacion": "Mesa con vista al jardín",
+    "id_mozo": 3
+  }'
+```
+
+---
+
+## Guest check-in and cancellation
+
+### PUT /api/reservas/:id/checkin
+
+Confirms a reservation by setting `estado_reserva` to `'confirmada'`. Call this when the guest arrives.
+
+#### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_reserva` of the reservation to confirm.
+</ParamField>
+
+#### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the status was updated to `'confirmada'`.
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**curl example**
+
+```bash
+curl --request PUT \
+  --url http://localhost:3000/api/reservas/14/checkin
+```
+
+---
+
+### PUT /api/reservas/:id/anular
+
+Cancels a reservation by setting `estado_reserva` to `'cancelada'`. Cancelled reservations are excluded from all listing endpoints.
+
+#### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_reserva` of the reservation to cancel.
+</ParamField>
+
+#### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the status was updated to `'cancelada'`.
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**curl example**
+
+```bash
+curl --request PUT \
+  --url http://localhost:3000/api/reservas/14/anular
+```
+
+---
+
+## Availability and calendar data
+
+### GET /api/reservas/ocupadas
+
+Returns the occupied time slots for a specific table on a given date. Use this before creating a reservation to detect conflicts and prevent double-booking.
+
+<Note>
+  Only non-cancelled reservations are included. A time slot is considered free if no reservation with `estado_reserva != 'cancelada'` exists for that table and date at that hour.
+</Note>
+
+#### Query parameters
+
+<ParamField query="id_mesa" type="number" required>
+  The table to check availability for.
+</ParamField>
+
+<ParamField query="fecha" type="string" required>
+  Date to check in `YYYY-MM-DD` format.
+</ParamField>
+
+#### Response
+
+An array of occupied time strings in `HH:mm` format.
+
+**200 — success**
+
+```json
+["12:00", "13:30", "19:00"]
+```
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url 'http://localhost:3000/api/reservas/ocupadas?id_mesa=5&fecha=2025-04-20'
+```
+
+---
+
+### GET /api/reservas/conteo-mensual
+
+Returns a count of non-cancelled reservations per day across all dates. Use this to populate calendar day labels showing how many bookings are scheduled.
+
+#### Response
+
+An array of daily count objects.
+
+<ResponseField name="fecha" type="string" required>
+  Date in `YYYY-MM-DD` format.
+</ResponseField>
+
+<ResponseField name="cantidad" type="number" required>
+  Number of non-cancelled reservations on that date.
+</ResponseField>
+
+**200 — success**
+
+```json
+[
+  { "fecha": "2025-04-18", "cantidad": 4 },
+  { "fecha": "2025-04-19", "cantidad": 7 },
+  { "fecha": "2025-04-20", "cantidad": 2 }
+]
+```
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url http://localhost:3000/api/reservas/conteo-mensual
+```

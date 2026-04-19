@@ -1,0 +1,379 @@
+---
+title: 'Orders API — create, update, and track table orders'
+description: "Endpoints for creating orders, adding or removing items, updating observations, and retrieving today's active orders with full item details."
+---
+
+The Orders API manages the full order lifecycle at a table. A waiter creates an order for a table, which atomically inserts the order, its line items, and marks the table as occupied. Additional items can be added to an open order, items removed, and an observation note updated at any time before checkout.
+
+---
+
+## GET /api/productos
+
+Returns the full product catalog. Use this to populate the item picker when building an order.
+
+### Response
+
+An array of product rows.
+
+<ResponseField name="id_producto" type="number" required>
+  Unique identifier for the product.
+</ResponseField>
+
+<ResponseField name="nombre" type="string" required>
+  Display name of the product.
+</ResponseField>
+
+<ResponseField name="precio" type="number" required>
+  Unit price of the product.
+</ResponseField>
+
+<ResponseField name="categoria" type="string" required>
+  Category the product belongs to (e.g., `"Entradas"`, `"Bebidas"`).
+</ResponseField>
+
+<ResponseField name="tiempo_estimado" type="number" required>
+  Estimated preparation time in minutes.
+</ResponseField>
+
+<ResponseField name="estado" type="number" required>
+  `1` if the product is active and available to order, `0` if it is unavailable.
+</ResponseField>
+
+**200 — success**
+
+```json
+[
+  {
+    "id_producto": 1,
+    "nombre": "Tiradito Clásico",
+    "precio": 28.50,
+    "categoria": "Entradas",
+    "tiempo_estimado": 10,
+    "estado": 1
+  }
+]
+```
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url http://localhost:3000/api/productos
+```
+
+---
+
+## GET /api/pedidos/hoy
+
+Returns all active orders for today. The response includes any order created today plus any unpaid order from a previous date. Each order includes a nested `items` array with full line-item detail.
+
+### Response
+
+An array of order rows sorted by `id_pedido` descending (most recent first).
+
+<ResponseField name="id_pedido" type="number" required>
+  Unique identifier for the order.
+</ResponseField>
+
+<ResponseField name="id_mesa" type="number" required>
+  Table the order belongs to.
+</ResponseField>
+
+<ResponseField name="id_mozo" type="number" required>
+  Waiter who created the order.
+</ResponseField>
+
+<ResponseField name="fecha_pedido" type="string" required>
+  Datetime the order was created.
+</ResponseField>
+
+<ResponseField name="total" type="number" required>
+  Running total for the order. Updated whenever items are added or removed.
+</ResponseField>
+
+<ResponseField name="estado_pedido" type="string" required>
+  Current order state. `'PREPARACION'` while open, `'PAGADO'` after checkout.
+</ResponseField>
+
+<ResponseField name="observacion" type="string">
+  Free-text note attached to the order. `null` if none has been set.
+</ResponseField>
+
+<ResponseField name="items" type="object[]" required>
+  Line items belonging to this order.
+
+  <Expandable title="item properties">
+    <ResponseField name="id_detalle" type="number" required>
+      Unique identifier for the line item.
+    </ResponseField>
+    <ResponseField name="nombre" type="string" required>
+      Product name at the time of the query.
+    </ResponseField>
+    <ResponseField name="cantidad" type="number" required>
+      Quantity ordered.
+    </ResponseField>
+    <ResponseField name="tiempo_estimado" type="number" required>
+      Estimated preparation time in minutes for this product.
+    </ResponseField>
+    <ResponseField name="subtotal" type="number" required>
+      Line total (`precio × cantidad`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**200 — success**
+
+```json
+[
+  {
+    "id_pedido": 42,
+    "id_mesa": 5,
+    "id_mozo": 3,
+    "fecha_pedido": "2025-04-19T20:15:00.000Z",
+    "total": 57.00,
+    "estado_pedido": "PREPARACION",
+    "observacion": null,
+    "items": [
+      {
+        "id_detalle": 101,
+        "nombre": "Tiradito Clásico",
+        "cantidad": 2,
+        "tiempo_estimado": 10,
+        "subtotal": 57.00
+      }
+    ]
+  }
+]
+```
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url http://localhost:3000/api/pedidos/hoy
+```
+
+---
+
+## POST /api/pedidos
+
+Creates a new order for a table. The operation runs inside a database transaction: the order record, all line items, and the table status update are committed together or rolled back entirely on failure.
+
+<Note>
+  This endpoint uses a database transaction. If any step fails — inserting the order, inserting line items, or updating the table state — all changes are rolled back and a `500` is returned. No partial state is written to the database.
+</Note>
+
+<Warning>
+  `items` must be a non-empty array. Submitting an empty array or omitting `items` returns a `400` error immediately, before any database operation is attempted.
+</Warning>
+
+### Request body
+
+<ParamField body="id_mesa" type="number" required>
+  Table the order is being placed for.
+</ParamField>
+
+<ParamField body="id_mozo" type="number" required>
+  Waiter creating the order.
+</ParamField>
+
+<ParamField body="total" type="number" required>
+  Pre-calculated order total. Should equal the sum of all item `subtotal` values.
+</ParamField>
+
+<ParamField body="items" type="object[]" required>
+  Array of line items to include in the order. Must contain at least one item.
+
+  <Expandable title="item properties">
+    <ParamField body="id_producto" type="number" required>
+      Product to add.
+    </ParamField>
+    <ParamField body="cantidad" type="number" required>
+      Quantity to order.
+    </ParamField>
+    <ParamField body="subtotal" type="number" required>
+      Line total for this item (`precio × cantidad`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the order was created successfully.
+</ResponseField>
+
+<ResponseField name="id_pedido" type="number" required>
+  The auto-incremented ID of the newly created order.
+</ResponseField>
+
+**Status codes**
+
+| Status | Condition |
+|--------|-----------|
+| `200`  | Order created, line items inserted, table marked `'ocupada'`. |
+| `400`  | `items` is missing or empty. |
+| `500`  | Transaction failed and was rolled back. |
+
+**200 — success**
+
+```json
+{
+  "success": true,
+  "id_pedido": 42
+}
+```
+
+**400 — empty order**
+
+```json
+{ "error": "El pedido está vacío" }
+```
+
+**500 — server error**
+
+```json
+{
+  "error": "Error en base de datos",
+  "detail": "<database error message>"
+}
+```
+
+**curl example**
+
+```bash
+curl --request POST \
+  --url http://localhost:3000/api/pedidos \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "id_mesa": 5,
+    "id_mozo": 3,
+    "total": 57.00,
+    "items": [
+      { "id_producto": 1, "cantidad": 2, "subtotal": 57.00 }
+    ]
+  }'
+```
+
+---
+
+## POST /api/pedidos/:id/agregar
+
+Adds a single item to an existing open order. Also increments the order's `total` by the item's `subtotal`.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_pedido` of the order to add the item to.
+</ParamField>
+
+### Request body
+
+<ParamField body="id_producto" type="number" required>
+  Product to add.
+</ParamField>
+
+<ParamField body="cantidad" type="number" required>
+  Quantity to add.
+</ParamField>
+
+<ParamField body="subtotal" type="number" required>
+  Line total for this item. This amount is added to the order's running total.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the item was inserted and the order total was updated.
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**curl example**
+
+```bash
+curl --request POST \
+  --url http://localhost:3000/api/pedidos/42/agregar \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "id_producto": 5,
+    "cantidad": 1,
+    "subtotal": 18.50
+  }'
+```
+
+---
+
+## DELETE /api/pedidos/detalle/:id_detalle
+
+Removes a line item from its order. The item's `subtotal` is deducted from the order's `total` before deletion.
+
+### Path parameters
+
+<ParamField path="id_detalle" type="number" required>
+  The `id_detalle` of the line item to remove.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the item was removed and the order total was decremented. Also returns `true` if no item with that `id_detalle` exists (no-op).
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**curl example**
+
+```bash
+curl --request DELETE \
+  --url http://localhost:3000/api/pedidos/detalle/101
+```
+
+---
+
+## PUT /api/pedidos/:id/observacion
+
+Updates the observation note on an existing order. Overwrites any previously stored note.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_pedido` of the order to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="observacion" type="string" required>
+  The new observation note to store on the order.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the observation was updated.
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**curl example**
+
+```bash
+curl --request PUT \
+  --url http://localhost:3000/api/pedidos/42/observacion \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "observacion": "Sin picante, alergia a mariscos"
+  }'
+```

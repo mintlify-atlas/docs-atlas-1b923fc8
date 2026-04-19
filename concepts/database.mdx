@@ -1,0 +1,156 @@
+---
+title: "MySQL database schema: tables, columns, and relations"
+description: "Wayra Web Backend connects to a MySQL database with tables for users, tables, reservations, products, orders, order details, and sales records."
+---
+
+Wayra Web Backend uses a MySQL database with seven tables that model every aspect of restaurant operations — from staff accounts and physical tables to reservations, orders, line items, and sales records. This page documents the column structure and foreign-key relationships inferred directly from the SQL queries in the source code.
+
+## Overview
+
+The MySQL database backing Wayra Web Backend contains seven tables. The schema below is inferred from the SQL queries in `index.js` and `controllers/mesaControlador.js`. Column names, types, and enumerated values are derived directly from those queries.
+
+## Tables
+
+### `usuarios`
+
+Stores all system users, both admins and mozos (waiters).
+
+| Column       | Notes                                         |
+| ------------ | --------------------------------------------- |
+| `id_usuario` | Primary key.                                  |
+| `nombre`     | Display name.                                 |
+| `usuario`    | Login username.                               |
+| `password`   | Plain-text password (compared in SQL `WHERE`).|
+| `rol`        | Either `'admin'` or `'mozo'`.                 |
+| `estado`     | `1` = active, `0` = inactive.                 |
+
+### `mesas`
+
+Represents the physical restaurant tables across floors and zones.
+
+| Column             | Notes                                                             |
+| ------------------ | ----------------------------------------------------------------- |
+| `id_mesa`          | Primary key.                                                      |
+| `estado`           | `'disponible'` \| `'ocupada'` \| `'limpieza'`.                   |
+| `id_mozo_asignado` | Foreign key → `usuarios.id_usuario`. The mozo assigned to serve this table. |
+| `hora_ocupada`     | Timestamp set when the table becomes occupied; cleared on checkout (`NULL`). |
+| `piso`             | Floor number or identifier.                                       |
+| `zona`             | Zone within the floor.                                            |
+
+<Note>
+  `mesaControlador.js` enforces a business rule: a mozo may have at most **4** tables with `estado = 'ocupada'` at the same time. Exceeding this limit returns HTTP 400.
+</Note>
+
+### `reservas`
+
+Tracks customer reservations linked to a table and optionally a mozo.
+
+| Column            | Notes                                                                           |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `id_reserva`      | Primary key.                                                                    |
+| `id_mesa`         | Foreign key → `mesas.id_mesa`.                                                  |
+| `id_mozo`         | Foreign key → `usuarios.id_usuario`. Nullable — a reservation may have no assigned mozo. |
+| `dni_cliente`     | Customer national ID number.                                                    |
+| `nombre_cliente`  | Customer name.                                                                  |
+| `telefono_cliente`| Customer phone number.                                                          |
+| `fecha_reserva`   | Date and time of the reservation.                                               |
+| `hora_reserva`    | Time of the reservation (stored separately for time-slot conflict queries).     |
+| `observacion`     | Optional note attached to the reservation.                                      |
+| `estado_reserva`  | `'pendiente'` \| `'confirmada'` \| `'cancelada'` \| `'completada'`.            |
+
+### `productos`
+
+The product catalogue (food and beverage items).
+
+| Column           | Notes                                              |
+| ---------------- | -------------------------------------------------- |
+| `id_producto`    | Primary key.                                       |
+| `nombre`         | Product name.                                      |
+| `precio`         | Unit price.                                        |
+| `categoria`      | Product category.                                  |
+| `tiempo_estimado`| Estimated preparation time.                        |
+| `estado`         | `1` = available, `0` = unavailable.                |
+
+### `pedidos`
+
+An order tied to a table and a mozo, created when a waiter submits items.
+
+| Column          | Notes                                                                  |
+| --------------- | ---------------------------------------------------------------------- |
+| `id_pedido`     | Primary key.                                                           |
+| `id_mesa`       | Foreign key → `mesas.id_mesa`.                                         |
+| `id_mozo`       | Foreign key → `usuarios.id_usuario`.                                   |
+| `fecha_pedido`  | Timestamp of when the order was created (`NOW()`).                     |
+| `total`         | Running total; updated when line items are added or removed.           |
+| `estado_pedido` | `'PREPARACION'` (open) \| `'PAGADO'` (checked out).                   |
+| `dni_cliente`   | Populated at checkout — the paying customer's national ID.             |
+| `nombre_cliente`| Populated at checkout — the paying customer's name.                    |
+| `observacion`   | Optional note added by the mozo after the order is created.            |
+
+### `pedido_detalle`
+
+One row per product line in an order.
+
+| Column       | Notes                                                  |
+| ------------ | ------------------------------------------------------ |
+| `id_detalle` | Primary key.                                           |
+| `id_pedido`  | Foreign key → `pedidos.id_pedido`.                     |
+| `id_producto`| Foreign key → `productos.id_producto`.                 |
+| `cantidad`   | Quantity ordered.                                      |
+| `subtotal`   | `precio × cantidad` for this line.                     |
+
+### `ventas`
+
+A sales record written at checkout, one row per paid order.
+
+| Column            | Notes                                                         |
+| ----------------- | ------------------------------------------------------------- |
+| `id_venta`        | Primary key (inferred; not referenced explicitly in queries). |
+| `total`           | Total amount charged, copied from the order.                  |
+| `metodo_pago`     | Payment method (e.g., cash, card).                            |
+| `tipo_comprobante`| Receipt type (e.g., boleta, factura).                         |
+
+<Note>
+  `ventas` is written by `PUT /api/pedidos/:id/checkout` inside a transaction that also marks the order as `'PAGADO'` and sets the table state to `'limpieza'`.
+</Note>
+
+## Relationships
+
+The diagram below shows the foreign-key relationships inferred from the SQL queries.
+
+```
+usuarios ──────────────────────────────────────────┐
+  │ id_usuario                                      │
+  │                                                 │
+  ├── mesas.id_mozo_asignado                        │
+  ├── reservas.id_mozo                              │
+  └── pedidos.id_mozo                               │
+                                                    │
+mesas ─────────────────────────────────────────────┤
+  │ id_mesa                                         │
+  │                                                 │
+  ├── reservas.id_mesa                              │
+  └── pedidos.id_mesa                               │
+                                                    │
+pedidos ────────────────────────────────────────────┘
+  │ id_pedido
+  │
+  └── pedido_detalle.id_pedido
+
+productos
+  │ id_producto
+  │
+  └── pedido_detalle.id_producto
+```
+
+### Foreign keys at a glance
+
+| Column                        | References                  |
+| ----------------------------- | --------------------------- |
+| `mesas.id_mozo_asignado`      | `usuarios.id_usuario`       |
+| `reservas.id_mesa`            | `mesas.id_mesa`             |
+| `reservas.id_mozo`            | `usuarios.id_usuario`       |
+| `pedidos.id_mesa`             | `mesas.id_mesa`             |
+| `pedidos.id_mozo`             | `usuarios.id_usuario`       |
+| `pedido_detalle.id_pedido`    | `pedidos.id_pedido`         |
+| `pedido_detalle.id_producto`  | `productos.id_producto`     |

@@ -1,0 +1,173 @@
+---
+title: 'Admin analytics — KPIs, sales history, and top items'
+description: 'GET /api/admin/metrics returns daily KPIs, weekly sales, top products, and waiter performance. GET /api/admin/historial lists paid orders by date.'
+---
+
+The admin metrics endpoints give managers a real-time view of restaurant performance. The metrics endpoint aggregates today's sales KPIs, a 7-day revenue trend, the top 5 best-selling products, and each waiter's order count and total revenue. The history endpoint returns a detailed list of completed orders for a specific date.
+
+---
+
+## GET /api/admin/metrics
+
+Returns aggregated performance data for the current day and the past 7 days. All figures are scoped to orders with `estado_pedido = 'PAGADO'`.
+
+### Response
+
+<ResponseField name="kpis" type="object" required>
+  Key performance indicators for today.
+
+  <Expandable title="properties">
+    <ResponseField name="ventasHoy" type="number" required>
+      Total revenue from paid orders today. `0` if no paid orders exist.
+    </ResponseField>
+    <ResponseField name="pedidos" type="number" required>
+      Count of paid orders today.
+    </ResponseField>
+    <ResponseField name="ticketPromedio" type="number" required>
+      Average order value today. `0` if no paid orders exist.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="ventasSemana" type="object[]" required>
+  Daily revenue totals for the last 7 days, ordered oldest to newest.
+
+  <Expandable title="properties">
+    <ResponseField name="fecha" type="string" required>
+      Date in `YYYY-MM-DD` format.
+    </ResponseField>
+    <ResponseField name="total" type="number" required>
+      Sum of paid order totals for that date.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="topProductos" type="object[]" required>
+  The 5 best-selling products by total quantity sold across all paid orders.
+
+  <Expandable title="properties">
+    <ResponseField name="nombre" type="string" required>
+      Product name.
+    </ResponseField>
+    <ResponseField name="cantidad" type="number" required>
+      Total units sold.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="rendimientoMozos" type="object[]" required>
+  Performance summary for each waiter who has at least one paid order.
+
+  <Expandable title="properties">
+    <ResponseField name="nombre" type="string" required>
+      Waiter's display name.
+    </ResponseField>
+    <ResponseField name="mesas" type="number" required>
+      Total number of paid orders handled.
+    </ResponseField>
+    <ResponseField name="total_vendido" type="number" required>
+      Sum of all paid order totals for this waiter.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**200 — success**
+
+```json
+{
+  "kpis": {
+    "ventasHoy": 1240.50,
+    "pedidos": 18,
+    "ticketPromedio": 68.92
+  },
+  "ventasSemana": [
+    { "fecha": "2025-04-13", "total": 980.00 },
+    { "fecha": "2025-04-14", "total": 1150.75 }
+  ],
+  "topProductos": [
+    { "nombre": "Tiradito Clásico", "cantidad": 42 },
+    { "nombre": "Lomo Saltado", "cantidad": 38 }
+  ],
+  "rendimientoMozos": [
+    { "nombre": "Carlos Ríos", "mesas": 9, "total_vendido": 620.00 },
+    { "nombre": "María Lau", "mesas": 9, "total_vendido": 620.50 }
+  ]
+}
+```
+
+**500 — server error**
+
+```json
+{ "error": "<database error message>" }
+```
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url http://localhost:3000/api/admin/metrics
+```
+
+---
+
+## GET /api/admin/historial
+
+Returns all paid orders for a specific date. Use this to review the day's closed tickets or generate end-of-day reports.
+
+### Query parameters
+
+<ParamField query="fecha" type="string" required>
+  Date to query in `YYYY-MM-DD` format. Only orders with `estado_pedido = 'PAGADO'` on this date are returned.
+</ParamField>
+
+### Response
+
+An array of paid order summaries for the requested date, sorted most recent first.
+
+<ResponseField name="id_pedido" type="number" required>
+  Unique identifier for the order.
+</ResponseField>
+
+<ResponseField name="hora" type="string" required>
+  Time the order was placed, formatted as `HH:mm`.
+</ResponseField>
+
+<ResponseField name="id_mesa" type="number" required>
+  Table the order belonged to.
+</ResponseField>
+
+<ResponseField name="total" type="number" required>
+  Final total of the paid order.
+</ResponseField>
+
+<ResponseField name="nombre_mozo" type="string" required>
+  Display name of the waiter who handled the order.
+</ResponseField>
+
+**200 — success**
+
+```json
+[
+  {
+    "id_pedido": 87,
+    "hora": "21:45",
+    "id_mesa": 3,
+    "total": 95.00,
+    "nombre_mozo": "Carlos Ríos"
+  },
+  {
+    "id_pedido": 86,
+    "hora": "20:10",
+    "id_mesa": 7,
+    "total": 112.50,
+    "nombre_mozo": "María Lau"
+  }
+]
+```
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url 'http://localhost:3000/api/admin/historial?fecha=2025-04-19'
+```

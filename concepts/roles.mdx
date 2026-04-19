@@ -1,0 +1,89 @@
+---
+title: "User roles: admin and mozo access patterns explained"
+description: "Wayra Web Backend has two user roles — admin and mozo (waiter) — each with distinct API access patterns and operational responsibilities."
+---
+
+Wayra Web Backend defines two user roles — `admin` and `mozo` (waiter) — that control which parts of the frontend each staff member can access. Role assignment happens at login: the server returns a `rol` field in the response, and the frontend uses that value to route the user to the appropriate interface. There is no server-side middleware enforcing role restrictions on individual endpoints.
+
+## Overview
+
+The `usuarios` table stores a `rol` column that holds one of two values: `admin` or `mozo`. There is no middleware in the backend that enforces role-based access. Instead, the login response includes the `rol` field and the frontend is responsible for using it to restrict navigation and UI actions.
+
+## How login works
+
+Send credentials to `POST /api/login`. The backend queries the `usuarios` table for a matching `usuario`, `password`, and `estado = 1` (active account), then returns:
+
+```json
+{
+  "success": true,
+  "usuario": {
+    "id_usuario": 3,
+    "nombre": "Carlos Ríos",
+    "rol": "mozo"
+  }
+}
+```
+
+If credentials are invalid or the account is inactive, the response is `401`:
+
+```json
+{ "success": false }
+```
+
+The `rol` value in the response is the sole signal that controls which parts of the frontend the user can access. The backend applies no per-route authentication checks.
+
+<Warning>
+  Because there is no server-side auth middleware, any client that knows an endpoint's path can call it regardless of role. Access control is enforced only in the frontend.
+</Warning>
+
+## Mozo (waiter) role
+
+A mozo is a waiter who manages tables, takes orders, and handles reservations assigned to them.
+
+**Operational constraints:**
+
+- A mozo can be assigned a maximum of **4 tables simultaneously**. This rule is enforced in `mesaControlador.js:23` — if `COUNT(*) >= 4` for occupied tables assigned to that mozo, the assignment is rejected with HTTP 400.
+- Reservations queried via `GET /api/reservas/hoy` are filtered by `id_mozo`, so each mozo only sees their own today's reservations.
+
+## Admin role
+
+An admin has operational oversight across all modules and is the only role intended to access the `/api/admin/*` endpoints. These endpoints cover sales metrics, order history, product catalogue management, and user management.
+
+## Endpoint access by role
+
+| Endpoint | Method | Mozo | Admin | Description |
+| -------- | ------ | :----: | :-----: | ----------- |
+| `/api/login` | `POST` | ✓ | ✓ | Authenticate and retrieve role. |
+| `/api/reservas/hoy` | `GET` | ✓ | ✓ | Today's reservations filtered by `id_mozo`. |
+| `/api/reservas` | `GET` | ✓ | ✓ | All reservations for a given date. |
+| `/api/reservas` | `POST` | ✓ | ✓ | Create a reservation. |
+| `/api/reservas/:id` | `PUT` | ✓ | ✓ | Update a reservation. |
+| `/api/reservas/:id/checkin` | `PUT` | ✓ | ✓ | Confirm a reservation. |
+| `/api/reservas/:id/anular` | `PUT` | ✓ | ✓ | Cancel a reservation. |
+| `/api/reservas/ocupadas` | `GET` | ✓ | ✓ | Booked time slots for a table on a date. |
+| `/api/reservas/conteo-mensual` | `GET` | ✓ | ✓ | Monthly reservation counts. |
+| `/api/mesas` | `GET` | ✓ | ✓ | List all tables. |
+| `/api/mesas/:id/liberar` | `PUT` | ✓ | ✓ | Set table state to `disponible`. |
+| `/api/mesas/asignar` | `POST` | ✓ | ✓ | Assign a table to a mozo (max 4 rule enforced). |
+| `/api/productos` | `GET` | ✓ | ✓ | List active products. |
+| `/api/pedidos` | `POST` | ✓ | ✓ | Create an order (sets table to `ocupada`). |
+| `/api/pedidos/hoy` | `GET` | ✓ | ✓ | All active or today's orders with line items. |
+| `/api/pedidos/:id/agregar` | `POST` | ✓ | ✓ | Add a line item to an existing order. |
+| `/api/pedidos/detalle/:id` | `DELETE` | ✓ | ✓ | Remove a line item and adjust order total. |
+| `/api/pedidos/:id/observacion` | `PUT` | ✓ | ✓ | Add a note to an order. |
+| `/api/pedidos/:id/checkout` | `PUT` | ✓ | ✓ | Process payment and record a sale. |
+| `/api/usuarios/mozos` | `GET` | — | ✓ | List active mozos (for assignment dropdowns). |
+| `/api/asignar-mozo` | `GET` | — | ✓ | Find the first available mozo. |
+| `/api/admin/metrics` | `GET` | — | ✓ | Today's KPIs, weekly sales, top products, mozo performance. |
+| `/api/admin/historial` | `GET` | — | ✓ | Paid order history for a given date. |
+| `/api/admin/productos` | `POST` | — | ✓ | Create a product. |
+| `/api/admin/productos/:id` | `PUT` | — | ✓ | Update a product. |
+| `/api/admin/usuarios` | `GET` | — | ✓ | List all users. |
+| `/api/admin/usuarios` | `POST` | — | ✓ | Create a user. |
+| `/api/admin/usuarios/:id` | `PUT` | — | ✓ | Update a user's name, username, or role. |
+| `/api/admin/usuarios/:id` | `DELETE` | — | ✓ | Delete a user. |
+| `/api/admin/usuarios/:id/estado` | `PUT` | — | ✓ | Toggle a user's active state. |
+
+<Note>
+  The ✓ marks in the Mozo column reflect what the frontend is expected to expose to that role. All these routes are publicly reachable at the HTTP level because no server-side middleware checks the role before processing a request.
+</Note>

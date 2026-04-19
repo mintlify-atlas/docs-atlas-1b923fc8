@@ -1,0 +1,207 @@
+---
+title: 'Tables API — list, assign, and release dining tables'
+description: 'Endpoints for listing all restaurant tables, releasing a table after service, and assigning a waiter to a table with a 4-table capacity limit.'
+---
+
+The Tables API gives you full visibility into the restaurant's table layout and their current availability states. You can list all tables with their floor and zone, release a table back to available status, and assign a waiter to a table — with automatic enforcement of the 4-table-per-waiter limit.
+
+---
+
+## Table states
+
+| State | Meaning |
+|-------|---------|
+| `disponible` | Table is free and ready for guests. |
+| `ocupada` | Table has an active order or is assigned to a waiter. |
+| `limpieza` | Table needs cleaning after checkout before it can be reused. |
+
+---
+
+## GET /api/mesas
+
+Returns all tables in the restaurant with their current state, assigned waiter, floor, and zone.
+
+### Response
+
+An array of all rows from the `mesas` table.
+
+<ResponseField name="id_mesa" type="number" required>
+  Unique identifier for the table.
+</ResponseField>
+
+<ResponseField name="estado" type="string" required>
+  Current state of the table. One of `disponible`, `ocupada`, or `limpieza`.
+</ResponseField>
+
+<ResponseField name="id_mozo_asignado" type="number">
+  Identifier of the waiter currently assigned to this table. `null` when the table is unassigned.
+</ResponseField>
+
+<ResponseField name="hora_ocupada" type="string">
+  Datetime at which the table was marked occupied. `null` when the table is available or in cleaning state.
+</ResponseField>
+
+<ResponseField name="piso" type="number" required>
+  Floor number where the table is located.
+</ResponseField>
+
+<ResponseField name="zona" type="string" required>
+  Zone label within the floor (e.g., `"A"`, `"B"`).
+</ResponseField>
+
+**Status codes**
+
+| Status | Condition |
+|--------|-----------|
+| `200`  | Tables returned successfully. |
+| `500`  | Database error. |
+
+**200 — success**
+
+```json
+[
+  {
+    "id_mesa": 1,
+    "estado": "disponible",
+    "id_mozo_asignado": null,
+    "hora_ocupada": null,
+    "piso": 1,
+    "zona": "A"
+  },
+  {
+    "id_mesa": 2,
+    "estado": "ocupada",
+    "id_mozo_asignado": 3,
+    "hora_ocupada": "2025-04-19T20:15:00.000Z",
+    "piso": 1,
+    "zona": "B"
+  }
+]
+```
+
+**500 — server error**
+
+```json
+{
+  "error": "Error al obtener mesas",
+  "detalle": "<database error message>"
+}
+```
+
+**curl example**
+
+```bash
+curl --request GET \
+  --url http://localhost:3000/api/mesas
+```
+
+---
+
+## PUT /api/mesas/:id/liberar
+
+Releases a table by setting its `estado` to `'disponible'`. Call this after cleaning is complete and the table is ready for new guests.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_mesa` of the table to release.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the table state was updated to `'disponible'`.
+</ResponseField>
+
+**Status codes**
+
+| Status | Condition |
+|--------|-----------|
+| `200`  | Table released successfully. |
+| `500`  | Database error. |
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**500 — server error**
+
+```json
+{
+  "error": "Error al liberar mesa",
+  "detail": "<database error message>"
+}
+```
+
+**curl example**
+
+```bash
+curl --request PUT \
+  --url http://localhost:3000/api/mesas/4/liberar
+```
+
+---
+
+## POST /api/mesas/asignar
+
+Assigns a waiter to a table and marks the table as `'ocupada'`. The server enforces a maximum of 4 simultaneously occupied tables per waiter.
+
+<Note>
+  A waiter can be assigned to at most 4 tables with `estado = 'ocupada'` at the same time. If the waiter already has 4 active tables, the request is rejected with a `400` response. This limit is checked atomically before any update is applied.
+</Note>
+
+### Request body
+
+<ParamField body="id_mesa" type="number" required>
+  The table to assign the waiter to.
+</ParamField>
+
+<ParamField body="id_mozo" type="number" required>
+  The waiter to assign.
+</ParamField>
+
+### Response
+
+<ResponseField name="mensaje" type="string" required>
+  Human-readable result message. `"Mesa asignada con éxito"` on success.
+</ResponseField>
+
+**Status codes**
+
+| Status | Condition |
+|--------|-----------|
+| `200`  | Waiter assigned successfully. |
+| `400`  | Waiter already has 4 occupied tables. |
+| `500`  | Database error. |
+
+**200 — success**
+
+```json
+{ "mensaje": "Mesa asignada con éxito" }
+```
+
+**400 — capacity limit reached**
+
+```json
+{ "mensaje": "El mozo ya tiene el límite de 4 mesas" }
+```
+
+**500 — server error**
+
+```json
+{ "mensaje": "Error en la asignación" }
+```
+
+**curl example**
+
+```bash
+curl --request POST \
+  --url http://localhost:3000/api/mesas/asignar \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "id_mesa": 7,
+    "id_mozo": 3
+  }'
+```

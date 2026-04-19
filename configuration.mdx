@@ -1,0 +1,65 @@
+---
+title: "Wayra Web Backend environment and CORS configuration"
+description: "Configure Wayra Web Backend by setting DATABASE_URL and PORT in a .env file. Includes CORS settings, connection pooling details, and script reference."
+---
+
+Wayra Web Backend uses environment variables for all runtime configuration. The server reads these at startup via `dotenv`, so you control behavior without modifying source code.
+
+## Environment variables
+
+Create a `.env` file at the project root. The server will not start without a valid `DATABASE_URL`.
+
+```bash .env
+DATABASE_URL=mysql://user:password@host:3306/database_name
+PORT=3000
+```
+
+### Variable reference
+
+<ParamField path="DATABASE_URL" type="string" required>
+  Full MySQL connection URL. The server uses `mysql2/promise` with connection pooling. Format: `mysql://user:password@host:port/database`.
+</ParamField>
+
+<ParamField path="PORT" type="number">
+  Port the HTTP server listens on. Defaults to `3000` if not set.
+</ParamField>
+
+## Database connection
+
+The server creates a MySQL connection pool from `DATABASE_URL`:
+
+```javascript config/db.js
+import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const pool = mysql.createPool(process.env.DATABASE_URL);
+
+export default pool;
+```
+
+The pool is shared across all route handlers, allowing concurrent queries without opening a new connection per request.
+
+## CORS configuration
+
+The server is pre-configured to accept cross-origin requests from any origin:
+
+```javascript index.js
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type']
+}));
+```
+
+<Warning>
+  The `origin: '*'` setting allows any domain. For production deployments, restrict this to your specific frontend origin.
+</Warning>
+
+## Scripts
+
+| Script | Command | Purpose |
+|--------|---------|---------|
+| `start` | `node index.js` | Production server |
+| `dev` | `nodemon index.js` | Development with auto-reload |

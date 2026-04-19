@@ -1,0 +1,89 @@
+---
+title: "Wayra Web Backend — restaurant management REST API"
+description: "Wayra Web Backend is an Express.js REST API powering Wayra Nikkei restaurant operations — reservations, orders, payments, and admin analytics over MySQL."
+---
+
+Wayra Web Backend is the server-side API for Wayra Nikkei restaurant. It exposes a set of HTTP endpoints that enable frontend clients to handle the full restaurant workflow: staff authentication, table reservations, order management, payment processing, and administrative reporting. The API is built with Express.js 5 and communicates with a MySQL database via a connection pool.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get the server running locally and make your first API call in minutes.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Set up your database connection and environment variables.
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/architecture">
+    Understand the system architecture, roles, and data model.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/auth">
+    Explore all available endpoints with request and response schemas.
+  </Card>
+</CardGroup>
+
+## What the API covers
+
+Wayra Web Backend is organized around the daily workflow of a restaurant:
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/api/auth">
+    Role-based login for admin staff and waiters (mozos).
+  </Card>
+  <Card title="Reservations" icon="calendar" href="/api/reservations">
+    Create, update, confirm, and cancel table reservations with conflict detection.
+  </Card>
+  <Card title="Tables" icon="utensils" href="/api/tables">
+    View table layout, assign waiters, and manage table availability states.
+  </Card>
+  <Card title="Orders" icon="receipt" href="/api/orders">
+    Place orders, add items, remove items, and track order state in real time.
+  </Card>
+  <Card title="Payments" icon="credit-card" href="/api/payments">
+    Process checkout with method selection, customer info, and sales recording.
+  </Card>
+  <Card title="Admin" icon="chart-bar" href="/api/admin-metrics">
+    Daily KPIs, weekly sales charts, top products, and waiter performance metrics.
+  </Card>
+</CardGroup>
+
+## Getting started
+
+<Steps>
+  <Step title="Clone and install">
+    Clone the repository and install dependencies with npm.
+
+    ```bash
+    git clone https://github.com/carrioneilnacr-art/Wayra_Web_Backend.git
+    cd Wayra_Web_Backend
+    npm install
+    ```
+  </Step>
+  <Step title="Configure your database">
+    Create a `.env` file and set your MySQL connection string.
+
+    ```bash .env
+    DATABASE_URL=mysql://user:password@host:3306/wayra_db
+    PORT=3000
+    ```
+  </Step>
+  <Step title="Start the server">
+    Run in development mode with auto-reload, or start for production.
+
+    ```bash
+    npm run dev   # development with nodemon
+    npm start     # production
+    ```
+  </Step>
+  <Step title="Make your first request">
+    Call the login endpoint to verify the server is running.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/login \
+      -H "Content-Type: application/json" \
+      -d '{"user": "admin", "pass": "secret"}'
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The server listens on port `3000` by default. Set the `PORT` environment variable to override.
+</Note>

@@ -1,0 +1,148 @@
+---
+title: 'Admin products — create and update menu catalog items'
+description: 'Create and update menu products with name, price, category, and estimated prep time. Products can be enabled or disabled without deletion.'
+---
+
+The admin products endpoints let managers maintain the restaurant's menu catalog. You can add new items to the menu with their name, price, category, and estimated preparation time, and update any of those attributes at any time. Products are soft-controlled via an `estado` flag — new products start active.
+
+---
+
+## POST /api/admin/productos
+
+Creates a new product and adds it to the menu. New products are always created with `estado = 1` (active).
+
+### Request body
+
+<ParamField body="nombre" type="string" required>
+  Display name of the product as it appears on the menu.
+</ParamField>
+
+<ParamField body="precio" type="number" required>
+  Unit price of the product.
+</ParamField>
+
+<ParamField body="categoria" type="string" required>
+  Menu category the product belongs to (e.g., `"Entradas"`, `"Bebidas"`, `"Postres"`).
+</ParamField>
+
+<ParamField body="tiempo_estimado" type="number" required>
+  Estimated preparation time in minutes.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the product was created successfully.
+</ResponseField>
+
+**Status codes**
+
+| Status | Condition |
+|--------|-----------|
+| `200`  | Product created and active. |
+| `500`  | Database error. Product was not created. |
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**500 — server error**
+
+```json
+{
+  "error": "Error al crear producto",
+  "detail": "<database error message>"
+}
+```
+
+**curl example**
+
+```bash
+curl --request POST \
+  --url http://localhost:3000/api/admin/productos \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "nombre": "Tiradito Clásico",
+    "precio": 28.50,
+    "categoria": "Entradas",
+    "tiempo_estimado": 10
+  }'
+```
+
+---
+
+## PUT /api/admin/productos/:id
+
+Updates one or more fields on an existing product. The update is built dynamically from the request body — only the fields you send are changed.
+
+<Tip>
+  You can send a partial body containing only the fields you want to update. For example, to change only the price, send `{ "precio": 32.00 }`. Fields omitted from the body are left unchanged.
+</Tip>
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_producto` of the product to update.
+</ParamField>
+
+### Request body
+
+Send any subset of the following fields. At least one field is required.
+
+<ParamField body="nombre" type="string">
+  Updated display name.
+</ParamField>
+
+<ParamField body="precio" type="number">
+  Updated unit price.
+</ParamField>
+
+<ParamField body="categoria" type="string">
+  Updated menu category.
+</ParamField>
+
+<ParamField body="tiempo_estimado" type="number">
+  Updated estimated preparation time in minutes.
+</ParamField>
+
+<ParamField body="estado" type="number">
+  Active status. `1` makes the product available to order, `0` hides it from the menu without deleting it.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the product was updated.
+</ResponseField>
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**500 — server error**
+
+```json
+{ "error": "<database error message>" }
+```
+
+**curl example — update price only**
+
+```bash
+curl --request PUT \
+  --url http://localhost:3000/api/admin/productos/1 \
+  --header 'Content-Type: application/json' \
+  --data '{ "precio": 32.00 }'
+```
+
+**curl example — disable a product**
+
+```bash
+curl --request PUT \
+  --url http://localhost:3000/api/admin/productos/1 \
+  --header 'Content-Type: application/json' \
+  --data '{ "estado": 0 }'
+```

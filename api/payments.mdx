@@ -1,0 +1,96 @@
+---
+title: 'Payments API — checkout orders and record sales data'
+description: 'PUT /api/pedidos/:id/checkout processes payment, records the sale, marks the order as PAGADO, and sets the table state to limpieza (cleaning).'
+---
+
+The Payments API handles the checkout flow for a completed order. When a guest is ready to pay, you call the checkout endpoint with the payment method and customer identification. The server atomically marks the order as PAGADO, creates a sale record in the `ventas` table, and transitions the table to `limpieza` state so staff know it needs cleaning before the next seating.
+
+---
+
+## PUT /api/pedidos/:id/checkout
+
+Processes payment for an order. All database writes — updating the order, inserting the sale record, and updating the table — execute inside a single transaction. If any step fails, all changes are rolled back.
+
+<Warning>
+  If the transaction fails at any point, the entire operation is rolled back. No partial state is written: the order remains unchanged, no sale record is created, and the table state is not updated.
+</Warning>
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The `id_pedido` of the order to check out.
+</ParamField>
+
+### Request body
+
+<ParamField body="metodo_pago" type="string" required>
+  Payment method used by the customer. Accepted values include `"efectivo"`, `"tarjeta"`, and `"yape"`.
+</ParamField>
+
+<ParamField body="dni_cliente" type="string" required>
+  Customer's national identification number (DNI).
+</ParamField>
+
+<ParamField body="nombre_cliente" type="string" required>
+  Customer's full name. Stored on the order record.
+</ParamField>
+
+<ParamField body="tipo_doc" type="string" required>
+  Type of fiscal document to issue. Accepted values include `"boleta"` and `"factura"`.
+</ParamField>
+
+### What happens inside the transaction
+
+1. Fetches the order's `total` and `id_mesa` from `pedidos`.
+2. Updates the order: sets `dni_cliente`, `nombre_cliente`, and `estado_pedido = 'PAGADO'`.
+3. Inserts a row into `ventas` with the order `total`, `metodo_pago`, and `tipo_comprobante`.
+4. Updates the table: sets `estado = 'limpieza'` and clears `hora_ocupada`.
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when all steps committed successfully.
+</ResponseField>
+
+**Status codes**
+
+| Status | Condition |
+|--------|-----------|
+| `200`  | Transaction committed. Order is PAGADO, sale recorded, table in limpieza. |
+| `404`  | No order found with the given `id`. |
+| `500`  | Transaction failed and was rolled back. |
+
+**200 — success**
+
+```json
+{ "success": true }
+```
+
+**404 — order not found**
+
+```json
+{ "error": "Pedido no encontrado" }
+```
+
+**500 — server error**
+
+```json
+{
+  "error": "Error en DB",
+  "detail": "<database error message>"
+}
+```
+
+**curl example**
+
+```bash
+curl --request PUT \
+  --url http://localhost:3000/api/pedidos/42/checkout \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "metodo_pago": "tarjeta",
+    "dni_cliente": "12345678",
+    "nombre_cliente": "Ana Torres",
+    "tipo_doc": "boleta"
+  }'
+```

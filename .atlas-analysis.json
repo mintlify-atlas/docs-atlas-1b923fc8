@@ -1,0 +1,119 @@
+{
+  "projectType": "api-service",
+  "projectName": "Wayra Web Backend",
+  "projectDescription": "A REST API backend for Wayra Nikkei restaurant, managing authentication, table reservations, orders, payments, and administrative operations using Express.js and MySQL.",
+  "theme": "luma",
+  "primaryColor": "#2D6A4F",
+  "lightColor": "#B7E4C7",
+  "darkColor": "#1B4332",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/roles",
+              "concepts/database"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth"
+            ]
+          },
+          {
+            "group": "Reservations",
+            "pages": [
+              "api/reservations"
+            ]
+          },
+          {
+            "group": "Tables",
+            "pages": [
+              "api/tables"
+            ]
+          },
+          {
+            "group": "Orders",
+            "pages": [
+              "api/orders"
+            ]
+          },
+          {
+            "group": "Payments",
+            "pages": [
+              "api/payments"
+            ]
+          },
+          {
+            "group": "Admin",
+            "pages": [
+              "api/admin-metrics",
+              "api/admin-users",
+              "api/admin-products"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "JWT-free session login with role-based access (admin, mozo/waiter)",
+    "Table reservation system with date/time conflict prevention",
+    "Multi-step order management with transactional database writes",
+    "Payment and checkout flow with sales record creation",
+    "Admin dashboard metrics: daily sales KPIs, top products, waiter performance",
+    "Waiter capacity enforcement (max 4 tables per waiter)",
+    "MySQL connection pooling via mysql2 with environment-based configuration",
+    "CORS-enabled for cross-origin frontend integration"
+  ],
+  "publicApiSurface": [
+    "POST /api/login",
+    "GET /api/reservas",
+    "POST /api/reservas",
+    "PUT /api/reservas/:id",
+    "GET /api/reservas/ocupadas",
+    "GET /api/reservas/conteo-mensual",
+    "PUT /api/reservas/:id/checkin",
+    "PUT /api/reservas/:id/anular",
+    "GET /api/reservas/hoy",
+    "GET /api/mesas",
+    "PUT /api/mesas/:id/liberar",
+    "POST /api/mesas/asignar",
+    "GET /api/productos",
+    "GET /api/pedidos/hoy",
+    "POST /api/pedidos",
+    "POST /api/pedidos/:id/agregar",
+    "DELETE /api/pedidos/detalle/:id_detalle",
+    "PUT /api/pedidos/:id/observacion",
+    "PUT /api/pedidos/:id/checkout",
+    "GET /api/asignar-mozo",
+    "GET /api/usuarios/mozos",
+    "GET /api/admin/metrics",
+    "GET /api/admin/historial",
+    "POST /api/admin/productos",
+    "PUT /api/admin/productos/:id",
+    "GET /api/admin/usuarios",
+    "POST /api/admin/usuarios",
+    "PUT /api/admin/usuarios/:id",
+    "DELETE /api/admin/usuarios/:id",
+    "PUT /api/admin/usuarios/:id/estado"
+  ]
+}

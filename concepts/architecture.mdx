@@ -1,0 +1,96 @@
+---
+title: "Wayra Web Backend: Express architecture and request flow"
+description: "Wayra Web Backend is a single-process Express.js 5 API connected to MySQL via a shared connection pool, with all business logic in route handlers."
+---
+
+Wayra Web Backend is a single-process Express.js 5 server that handles all restaurant operations through a set of HTTP endpoints. All routes, middleware, and business logic live in `index.js`, backed by a shared MySQL connection pool. Understanding this architecture helps you predict how requests are handled, where errors originate, and how transactions are scoped.
+
+## Overview
+
+Wayra Web Backend is a single Express.js 5 server declared in `index.js`. The project uses ES modules (`"type": "module"` in `package.json`), so all imports use `import`/`export` syntax. There is no separate layer for services or repositories — route handlers call `pool.query()` directly and return JSON.
+
+A secondary router defined in `routes/rutas.js` handles the table-management endpoints (`GET /mesas` and `POST /mesas/asignar`) via `mesaControlador.js`. That router is the only file that delegates logic to a controller; all other routes are inline in `index.js`.
+
+## Request flow
+
+Every HTTP request passes through the same middleware chain before reaching a handler:
+
+<Steps>
+  <Step title="CORS middleware">
+    `cors()` is applied globally. It allows any origin (`*`) and the methods `GET`, `POST`, `PUT`, and `DELETE` with the `Content-Type` header.
+  </Step>
+  <Step title="JSON body parser">
+    `express.json()` parses the request body and makes it available as `req.body`.
+  </Step>
+  <Step title="Route handler">
+    The matching route handler runs. For most routes this is an `async` function defined inline in `index.js`. For `GET /mesas` and `POST /mesas/asignar` the handler is exported from `mesaControlador.js` and mounted via the router in `rutas.js`.
+  </Step>
+  <Step title="MySQL pool query">
+    The handler calls `pool.query()` (or acquires a connection with `pool.getConnection()` for multi-statement transactions) against the shared `mysql2/promise` pool imported from `config/db.js`.
+  </Step>
+  <Step title="JSON response">
+    The handler serialises the result and calls `res.json()`. Errors are caught and returned as `res.status(500).json({ error, detail })`.
+  </Step>
+</Steps>
+
+```
+HTTP request
+     │
+     ▼
+ cors() middleware
+     │
+     ▼
+ express.json()
+     │
+     ▼
+ Route handler (index.js or mesaControlador.js)
+     │
+     ▼
+ pool.query() / connection.query()
+     │           (mysql2/promise pool)
+     ▼
+ res.json() → HTTP response
+```
+
+## Database layer
+
+The connection pool is created once in `config/db.js` and exported as the default export:
+
+```javascript config/db.js
+import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const pool = mysql.createPool(process.env.DATABASE_URL);
+
+export default pool;
+```
+
+`dotenv` reads the `DATABASE_URL` environment variable (a standard MySQL connection string). Because the pool is a module-level singleton, all route handlers share the same pool across the lifetime of the process — no connection is created per request.
+
+<Note>
+  Multi-statement operations (creating an order, processing a checkout) acquire a dedicated connection with `pool.getConnection()`, run `beginTransaction()` / `commit()` / `rollback()`, and release the connection in a `finally` block.
+</Note>
+
+## Routes in `routes/rutas.js`
+
+`rutas.js` defines an Express router with two endpoints handled by `mesaControlador.js`:
+
+| Method | Path             | Controller function  | Description                              |
+| ------ | ---------------- | -------------------- | ---------------------------------------- |
+| `GET`  | `/mesas`         | `obtenerMesas`       | Returns all rows from the `mesas` table. |
+| `POST` | `/mesas/asignar` | `asignarMesaAMozo`   | Assigns a table to a waiter, enforcing the 4-table-per-waiter business rule. |
+
+<Warning>
+  The router in `rutas.js` must be mounted in `index.js` with a base path (e.g., `app.use('/api', router)`) for these routes to be reachable. The inline `GET /api/mesas` route in `index.js` also exists and returns the same data — both routes query `SELECT * FROM mesas`.
+</Warning>
+
+## Key dependencies
+
+| Package          | Version   | Purpose                                              |
+| ---------------- | --------- | ---------------------------------------------------- |
+| `express`        | `^5.2.1`  | HTTP server and routing framework.                   |
+| `mysql2`         | `^3.20.0` | MySQL client with Promise support (`mysql2/promise`).|
+| `cors`           | `^2.8.6`  | Cross-Origin Resource Sharing middleware.            |
+| `dotenv`         | `^17.4.0` | Loads environment variables from a `.env` file.      |
